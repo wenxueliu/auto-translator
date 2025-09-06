@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能翻译设置</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <h1>智能翻译设置</h1>
+        
+        <div class="section">
+            <h3>API 配置</h3>
+            <label for="apiKey">OpenAI API Key:</label>
+            <input type="password" id="apiKey" placeholder="sk-...">
+            <label for="apiModel">选择模型:</label>
+            <select id="apiModel">
+                <option value="deepseek-chat">DeepSeek V3</option>
+                <option value="qwen-mt-turbo">Qwen MT Turbo</option>
+                <option value="qwen-mt-plus">Qwen MT Plus</option>
+            </select>
+            <button id="saveApiConfig">保存配置</button>
+        </div>
+        
+        <div class="section">
+            <h3>词库管理</h3>
+            <div class="vocabulary-controls">
+                <button id="exportVocab">导出词库</button>
+                <button id="importVocab">导入词库</button>
+                <input type="file" id="importFile" accept=".json" style="display: none;">
+            </div>
+            <div id="wordList">
+                <h4>当前词库</h4>
+                <div id="vocabularyList"></div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h3>翻译设置</h3>
+            <label>
+                <input type="checkbox" id="contextAware"> 启用上下文感知翻译
+            </label>
+            <label>
+                <input type="checkbox" id="showOriginal"> 显示原文
+            </label>
+            <button id="saveSettings">保存设置</button>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
