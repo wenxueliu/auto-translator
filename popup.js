@@ -16,8 +16,13 @@ async function loadSettings() {
         // 填充API设置
         document.getElementById('apiKey').value = settings.apiKey || '';
         document.getElementById('apiModel').value = settings.apiModel || 'gpt-3.5-turbo';
+        document.getElementById('customModelUrl').value = settings.customModelUrl || '';
+        document.getElementById('customModelName').value = settings.customModelName || '';
         document.getElementById('contextAware').checked = settings.contextAware !== false;
         document.getElementById('showOriginal').checked = settings.showOriginal || false;
+
+        // 显示/隐藏自定义模型配置
+        toggleCustomModelConfig();
         
         console.log('设置已加载');
     } catch (error) {
@@ -67,20 +72,43 @@ async function loadVocabulary() {
     }
 }
 
+// 切换自定义模型配置显示
+function toggleCustomModelConfig() {
+    const modelSelect = document.getElementById('apiModel');
+    const customConfig = document.getElementById('customModelConfig');
+
+    if (modelSelect.value === 'custom-openai') {
+        customConfig.style.display = 'block';
+    } else {
+        customConfig.style.display = 'none';
+    }
+}
+
 // 设置事件监听器
 function setupEventListeners() {
+    // 模型选择变化时切换自定义配置显示
+    document.getElementById('apiModel').addEventListener('change', toggleCustomModelConfig);
+
     // 保存API配置
     document.getElementById('saveApiConfig').addEventListener('click', async () => {
         const apiKey = document.getElementById('apiKey').value.trim();
         const apiModel = document.getElementById('apiModel').value;
-        
+        const customModelUrl = document.getElementById('customModelUrl').value.trim();
+        const customModelName = document.getElementById('customModelName').value.trim();
+
         try {
             const result = await chrome.storage.local.get(['settings']);
             const settings = result.settings || {};
-            
+
             settings.apiKey = apiKey;
             settings.apiModel = apiModel;
-            
+
+            // 如果选择了自定义模型，保存自定义配置
+            if (apiModel === 'custom-openai') {
+                settings.customModelUrl = customModelUrl;
+                settings.customModelName = customModelName;
+            }
+
             await chrome.storage.local.set({ settings });
             showNotification('API配置已保存');
         } catch (error) {

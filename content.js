@@ -34,9 +34,9 @@ class TranslationService {
     async getOpenAITranslation(word, context, settings) {
         try {
             // 获取模型对应的URL
-            const url = this.getModelUrl(settings.apiModel || 'qwen-mt-turbo');
+            const url = this.getModelUrl(settings.apiModel || 'qwen-mt-turbo', settings);
             const headers = this.getModelHeaders(settings.apiModel || 'qwen-mt-turbo', settings.apiKey);
-            const payload = this.getModelPayload(settings.apiModel || 'qwen-mt-turbo', word, context);
+            const payload = this.getModelPayload(settings.apiModel || 'qwen-mt-turbo', word, context, settings);
             
             console.log(`🌐 使用模型: ${settings.apiModel || 'qwen-mt-turbo'}`);
             console.log(`🔗 请求URL: ${url}`);
@@ -72,7 +72,7 @@ class TranslationService {
     }
     
     // 获取模型对应的URL
-    getModelUrl(model) {
+    getModelUrl(model, settings = {}) {
         const modelUrls = {
             'gpt-3.5-turbo': 'https://api.openai.com/v1/chat/completions',
             'gpt-4': 'https://api.openai.com/v1/chat/completions',
@@ -87,13 +87,18 @@ class TranslationService {
             'qwen-mt-turbo': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
             'qwen-mt-plus': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
         };
-        
+
+        // 如果是自定义OpenAI模型
+        if (model === 'custom-openai' && settings.customModelUrl) {
+            return settings.customModelUrl;
+        }
+
         return modelUrls[model] || modelUrls['gpt-3.5-turbo'];
     }
     
     // 获取模型对应的请求头
     getModelHeaders(model, apiKey) {
-        if (model.startsWith('gpt-')) {
+        if (model.startsWith('gpt-') || model === 'custom-openai') {
             return {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
@@ -117,10 +122,11 @@ class TranslationService {
     }
     
     // 获取模型对应的请求体
-    getModelPayload(model, word, context) {
-        if (model.startsWith('gpt-')) {
+    getModelPayload(model, word, context, settings = {}) {
+        if (model.startsWith('gpt-') || model === 'custom-openai') {
+            const modelName = model === 'custom-openai' ? (settings.customModelName || 'gpt-3.5-turbo') : model;
             return {
-                model: model,
+                model: modelName,
                 messages: [
                     {
                         role: 'system',
@@ -209,7 +215,7 @@ class TranslationService {
     // 从响应中提取翻译结果
     extractTranslation(data, model) {
         try {
-            if (model.startsWith('gpt-') || model.startsWith('qwen-')) {
+            if (model.startsWith('gpt-') || model.startsWith('qwen-') || model === 'custom-openai') {
                 return data.choices[0].message.content.trim();
             } else if (model.startsWith('claude-')) {
                 return data.content[0].text.trim();

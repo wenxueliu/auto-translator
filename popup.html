@@ -16,10 +16,20 @@
             <input type="password" id="apiKey" placeholder="sk-...">
             <label for="apiModel">选择模型:</label>
             <select id="apiModel">
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
                 <option value="deepseek-chat">DeepSeek V3</option>
                 <option value="qwen-mt-turbo">Qwen MT Turbo</option>
                 <option value="qwen-mt-plus">Qwen MT Plus</option>
+                <option value="custom-openai">自定义 OpenAI 模型</option>
             </select>
+            <div id="customModelConfig" style="display: none; margin-top: 10px;">
+                <label for="customModelUrl">自定义模型 URL:</label>
+                <input type="text" id="customModelUrl" placeholder="https://api.openai.com/v1/chat/completions">
+                <label for="customModelName">自定义模型名称:</label>
+                <input type="text" id="customModelName" placeholder="gpt-4o-mini">
+            </div>
             <button id="saveApiConfig">保存配置</button>
         </div>
         
