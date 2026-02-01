@@ -5,6 +5,45 @@ let originalTexts = new Map();
 let vocabulary = {};
 let settings = {};
 
+// 语言检测工具类
+class LanguageDetector {
+    static detectLanguage(text) {
+        // 检查中文字符
+        const chineseRegex = /[\u4e00-\u9fff]/;
+        // 检查英文字母
+        const englishRegex = /[a-zA-Z]+/;
+
+        const hasChinese = chineseRegex.test(text);
+        const hasEnglish = englishRegex.test(text);
+
+        if (hasChinese && !hasEnglish) return 'zh';
+        if (hasEnglish && !hasChinese) return 'en';
+        if (hasChinese && hasEnglish) return 'mixed';
+        return 'unknown';
+    }
+
+    static getTranslationDirection(sourceLang, settings) {
+        const { translationDirection = 'auto' } = settings;
+
+        if (translationDirection === 'auto') {
+            return sourceLang === 'zh' ? 'zh-to-en' : 'en-to-zh';
+        }
+        return translationDirection;
+    }
+
+    static isChineseText(text) {
+        return this.detectLanguage(text) === 'zh';
+    }
+
+    static isEnglishText(text) {
+        return this.detectLanguage(text) === 'en';
+    }
+
+    static hasChineseCharacters(text) {
+        return /[\u4e00-\u9fff]/.test(text);
+    }
+}
+
 // 创建翻译服务实例
 class TranslationService {
     constructor() {
@@ -12,31 +51,43 @@ class TranslationService {
         };
     }
     
-    async getTranslation(word, context, settings) {
+    async getTranslation(word, context, settings, explicitDirection = null) {
         try {
             console.log('🤖 开始翻译:', word);
-            
+
+            // 确定翻译方向
+            let translationDirection;
+            if (explicitDirection) {
+                translationDirection = explicitDirection;
+                console.log(`🎯 使用指定翻译方向: ${translationDirection}`);
+            } else {
+                // 检测语言和确定翻译方向
+                const detectedLang = LanguageDetector.detectLanguage(word);
+                translationDirection = LanguageDetector.getTranslationDirection(detectedLang, settings);
+                console.log(`🔍 检测语言: ${detectedLang}, 翻译方向: ${translationDirection}`);
+            }
+
             // 检查是否有API key
             if (!settings.apiKey) {
                 console.log('⚠️ 无API key，使用本地翻译');
                 return this.getLocalTranslation(word);
             }
-            
-            // 使用OpenAI API
-            return await this.getOpenAITranslation(word, context, settings);
-            
+
+            // 使用对应的翻译API
+            return await this.getOpenAITranslation(word, context, settings, translationDirection);
+
         } catch (error) {
             console.error('❌ 翻译失败:', error);
             return this.getLocalTranslation(word) || word;
         }
     }
     
-    async getOpenAITranslation(word, context, settings) {
+    async getOpenAITranslation(word, context, settings, translationDirection = 'en-to-zh') {
         try {
             // 获取模型对应的URL
             const url = this.getModelUrl(settings.apiModel || 'qwen-mt-turbo', settings);
             const headers = this.getModelHeaders(settings.apiModel || 'qwen-mt-turbo', settings.apiKey);
-            const payload = this.getModelPayload(settings.apiModel || 'qwen-mt-turbo', word, context, settings);
+            const payload = this.getModelPayload(settings.apiModel || 'qwen-mt-turbo', word, context, settings, translationDirection);
             
             console.log(`🌐 使用模型: ${settings.apiModel || 'qwen-mt-turbo'}`);
             console.log(`🔗 请求URL: ${url}`);
@@ -120,9 +171,31 @@ class TranslationService {
             'Content-Type': 'application/json'
         };
     }
-    
+
+    // 根据翻译方向获取提示词
+    getPromptsByDirection(direction) {
+        const promptMap = {
+            'zh-to-en': {
+                system: '你是一个专业的翻译助手。将中文单词翻译成英文，考虑上下文，只返回简洁的英文翻译。',
+                user: (word, context) => `${word}（上下文：${context}）`,
+                claudeUser: (word, context) => `将中文单词"${word}"翻译成英文，考虑上下文"${context}"。只返回英文翻译结果。`,
+                geminiText: (word, context) => `将中文单词"${word}"翻译成英文，考虑上下文"${context}"。只返回英文翻译结果。`
+            },
+            'en-to-zh': {
+                system: '你是一个专业的翻译助手。将英文单词翻译成中文，考虑上下文，只返回简洁的中文翻译。',
+                user: (word, context) => `${word}（上下文：${context}）`,
+                claudeUser: (word, context) => `将英文单词"${word}"翻译成中文，考虑上下文"${context}"。只返回中文翻译结果。`,
+                geminiText: (word, context) => `将英文单词"${word}"翻译成中文，考虑上下文"${context}"。只返回中文翻译结果。`
+            }
+        };
+
+        return promptMap[direction] || promptMap['en-to-zh'];
+    }
+
     // 获取模型对应的请求体
-    getModelPayload(model, word, context, settings = {}) {
+    getModelPayload(model, word, context, settings = {}, translationDirection = 'en-to-zh') {
+        // 根据翻译方向获取提示词
+        const prompts = this.getPromptsByDirection(translationDirection);
         if (model.startsWith('gpt-') || model === 'custom-openai') {
             const modelName = model === 'custom-openai' ? (settings.customModelName || 'gpt-3.5-turbo') : model;
             return {
@@ -130,14 +203,14 @@ class TranslationService {
                 messages: [
                     {
                         role: 'system',
-                        content: '你是一个专业的翻译助手。将英文单词翻译成中文，考虑上下文，只返回简洁的中文翻译。'
+                        content: prompts.system
                     },
                     {
                         role: 'user',
-                        content: `${word}（上下文：${context}）`
+                        content: prompts.user(word, context)
                     }
                 ],
-                max_tokens: 5,
+                max_tokens: 10,
                 temperature: 0.1
             };
         } else if (model.startsWith('claude-')) {
@@ -146,10 +219,10 @@ class TranslationService {
                 messages: [
                     {
                         role: 'user',
-                        content: `将英文单词"${word}"翻译成中文，考虑上下文"${context}"。只返回中文翻译结果。`
+                        content: prompts.claudeUser(word, context)
                     }
                 ],
-                max_tokens: 5,
+                max_tokens: 10,
                 temperature: 0.1
             };
         } else if (model.startsWith('gemini-')) {
@@ -158,56 +231,62 @@ class TranslationService {
                     {
                         parts: [
                             {
-                                text: `将英文单词"${word}"翻译成中文，考虑上下文"${context}"。只返回中文翻译结果。`
+                                text: prompts.geminiText(word, context)
                             }
                         ]
                     }
                 ],
                 generationConfig: {
                     temperature: 0.1,
-                    maxOutputTokens: 5
+                    maxOutputTokens: 10
                 }
             };
         } else if (model.startsWith('deepseek-')) {
-                return {
-                    model: model,
-                    messages: [
-                        {
-                             role: 'system',
-                             content: '你是一个中英文翻译专家，将用户输入的中文翻译成英文，或将用户输入的英文翻译成中文。对于非中文内容，它将提供中文翻译结果。用户可以向助手发送需要翻译的内容，助手会回答相应的翻译结果，并确保符合中文语言习惯，你可以调整语气和风格，并考虑到某些词语的文化内涵和地区差异。同时作为翻译家，需将原文翻译成具有信达雅标准的译文。"信" 即忠实于原文的内容与意图；"达" 意味着译文应通顺易懂，表达清晰；"雅" 则追求译文的文化审美和语言的优美。目标是创作出既忠于原作精神，又符合目标语言文化和读者审美的翻译。'
-                        },
-                        {
-                             role: 'user',
-                             content: `将英文单词"${word}"翻译成中文，考虑上下文"${context}"。只返回"${word}"的中文翻译结果。`
-                        }
-                    ],
-                    max_tokens: 2048,
-                    temperature: 1.3
-                };
+            return {
+                model: model,
+                messages: [
+                    {
+                        role: 'system',
+                        content: prompts.system
+                    },
+                    {
+                        role: 'user',
+                        content: prompts.user(word, context)
+                    }
+                ],
+                stream: false,
+                max_tokens: 2048,
+                temperature: 1.3
+            };
         } else if (model.startsWith('qwen-')) {
-                 return {
-                     model: model,
-                     messages: [
-                         {
-                              role: 'user',
-                              content: `将英文单词"${word}"翻译成中文，考虑上下文"${context}"。只返回"${word}"的中文翻译结果。`
-                         }
-                     ],
-                     translation_options: {
-                           source_lang: 'English',
-                           target_lang: 'Chinese'
-                     }
-                 };
+            return {
+                model: model,
+                messages: [
+                    {
+                        role: 'user',
+                        content: prompts.user(word, context)
+                    }
+                ],
+                translation_options: {
+                    source_lang: translationDirection === 'zh-to-en' ? 'Chinese' : 'English',
+                    target_lang: translationDirection === 'zh-to-en' ? 'English' : 'Chinese'
+                }
+            };
         }
         return {
             model: model,
             messages: [
                 {
+                    role: 'system',
+                    content: prompts.system
+                },
+                {
                     role: 'user',
-                    content: `将"${word}"翻译成中文`
+                    content: prompts.user(word, context)
                 }
             ],
-            max_tokens: 5,
+            stream: false,
+            max_tokens: 2048,
             temperature: 0.1
         };
     }
@@ -283,11 +362,11 @@ async function init() {
 // 处理消息
 function handleMessage(event) {
     if (event.source !== window) return;
-    
+
     if (event.data.type === 'TRANSLATE_PAGE') {
         translatePage();
     } else if (event.data.type === 'TRANSLATE_SELECTION') {
-        translateSelectedText(event.data.word);
+        translateSelectedText(event.data.word, event.data.direction);
     }
 }
 
@@ -318,9 +397,9 @@ async function loadVocabulary() {
 }
 
 // 获取上下文感知的翻译
-async function getContextualTranslation(word, context) {
+async function getContextualTranslation(word, context, explicitDirection = null) {
     try {
-        return await translationService.getTranslation(word, context, settings);
+        return await translationService.getTranslation(word, context, settings, explicitDirection);
     } catch (error) {
         console.error('上下文翻译失败:', error);
         return word;
@@ -604,8 +683,8 @@ function isWordAlreadyTranslated(text, word) {
 }
 
 // 翻译选中的文字
-async function translateSelectedText(word) {
-    console.log('🎯 翻译选中文字:', word);
+async function translateSelectedText(word, explicitDirection = null) {
+    console.log('🎯 翻译选中文字:', word, explicitDirection ? `(方向: ${explicitDirection})` : '');
     
     if (!word || word.trim().length === 0) {
         console.log('选中文本为空');
@@ -645,7 +724,7 @@ async function translateSelectedText(word) {
             } else {
                 // 实时翻译
                 const context = getPhraseContext(text, text.indexOf(word), word);
-                translation = await getContextualTranslation(word, context);
+                translation = await getContextualTranslation(word, context, explicitDirection);
                 
                 // 缓存翻译结果
                 if (vocabItem) {
